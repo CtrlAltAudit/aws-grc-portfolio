@@ -1,0 +1,62 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowReadOnlyAccess",
+      "Effect": "Allow",
+      "Action": [
+        "iam:Get*",
+        "iam:List*",
+        "iam:GenerateCredentialReport",
+        "iam:GenerateServiceLastAccessedDetails",
+        "s3:Get*",
+        "s3:List*",
+        "cloudtrail:Get*",
+        "cloudtrail:List*",
+        "cloudtrail:Describe*",
+        "cloudtrail:LookupEvents",
+        "cloudwatch:Get*",
+        "cloudwatch:List*",
+        "cloudwatch:Describe*",
+        "config:Get*",
+        "config:List*",
+        "config:Describe*",
+        "config:BatchGetResourceConfig",
+        "ec2:Describe*",
+        "logs:Get*",
+        "logs:List*",
+        "logs:Describe*",
+        "logs:FilterLogEvents"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenyAllWrites",
+      "Effect": "Deny",
+      "Action": [
+        "iam:CreateUser",
+        "iam:DeleteUser",
+        "iam:CreateRole",
+        "iam:DeleteRole",
+        "iam:AttachUserPolicy",
+        "iam:DetachUserPolicy",
+        "iam:PutUserPolicy",
+        "iam:DeleteUserPolicy",
+        "iam:CreateAccessKey",
+        "iam:DeleteAccessKey",
+        "iam:UpdateAccessKey",
+        "s3:PutObject",
+        "s3:DeleteObject",
+        "s3:PutBucketPolicy",
+        "s3:DeleteBucketPolicy",
+        "cloudtrail:CreateTrail",
+        "cloudtrail:DeleteTrail",
+        "cloudtrail:StopLogging",
+        "cloudtrail:UpdateTrail",
+        "config:DeleteConfigRule",
+        "config:StopConfigurationRecorder"
+      ],
+      "Resource": "*"
+    }
+  ]
+}

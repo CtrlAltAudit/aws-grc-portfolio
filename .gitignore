@@ -216,3 +216,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Audit evidence files - never commit these
+*.csv
+*.xlsx
+evidence/
