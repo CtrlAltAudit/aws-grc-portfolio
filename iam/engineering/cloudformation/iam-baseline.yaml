@@ -8,23 +8,30 @@ Description: >
   Apply it separately using the AWS CLI command documented in engineering/README.md.
 
 Parameters:
+  NamePrefix:
+    Type: String
+    Default: cfn-
+    Description: >
+      Prefix applied to all resource names. Use "cfn-" to deploy alongside
+      manually-created resources for comparison. Use "" (empty) for a clean account.
+
   AuditorPassword:
     Type: String
     NoEcho: true
     MinLength: 14
-    Description: Initial console password for bryanne-auditor
+    Description: Initial console password for the auditor user
 
   AdminPassword:
     Type: String
     NoEcho: true
     MinLength: 14
-    Description: Initial console password for bryanne-admin
+    Description: Initial console password for the admin user
 
   DevPassword:
     Type: String
     NoEcho: true
     MinLength: 14
-    Description: Initial console password for bryanne-dev
+    Description: Initial console password for the developer user
 
   DevBucketName:
     Type: String
@@ -39,7 +46,7 @@ Resources:
     Type: AWS::IAM::ManagedPolicy
     # CIS 1.16 — least privilege; SOC 2 CC6.3 — logical access controls
     Properties:
-      ManagedPolicyName: auditor-readonly
+      ManagedPolicyName: !Sub '${NamePrefix}auditor-readonly'
       Description: Read-only access for auditors with explicit deny on all write actions
       PolicyDocument:
         Version: '2012-10-17'
@@ -101,7 +108,7 @@ Resources:
     Type: AWS::IAM::ManagedPolicy
     # CIS 1.16 — resource-level least privilege (specific bucket ARN, not wildcard)
     Properties:
-      ManagedPolicyName: developer-s3-limited
+      ManagedPolicyName: !Sub '${NamePrefix}developer-s3-limited'
       Description: S3 access scoped to a specific bucket with explicit deny on security services
       PolicyDocument:
         Version: '2012-10-17'
@@ -140,7 +147,7 @@ Resources:
     Type: AWS::IAM::ManagedPolicy
     # CIS 3.2 — protect audit logs; CIS 4.1 — region restriction
     Properties:
-      ManagedPolicyName: admin-with-guardrails
+      ManagedPolicyName: !Sub '${NamePrefix}admin-with-guardrails'
       Description: Admin access with tamper-resistant guardrails on audit controls and region lock
       PolicyDocument:
         Version: '2012-10-17'
@@ -178,7 +185,7 @@ Resources:
   AuditorUser:
     Type: AWS::IAM::User
     Properties:
-      UserName: bryanne-auditor
+      UserName: !Sub '${NamePrefix}auditor'
       LoginProfile:
         Password: !Ref AuditorPassword
         PasswordResetRequired: false
@@ -188,7 +195,7 @@ Resources:
   AdminUser:
     Type: AWS::IAM::User
     Properties:
-      UserName: bryanne-admin
+      UserName: !Sub '${NamePrefix}admin'
       LoginProfile:
         Password: !Ref AdminPassword
         PasswordResetRequired: false
@@ -198,7 +205,7 @@ Resources:
   DevUser:
     Type: AWS::IAM::User
     Properties:
-      UserName: bryanne-dev
+      UserName: !Sub '${NamePrefix}dev'
       LoginProfile:
         Password: !Ref DevPassword
         PasswordResetRequired: false
