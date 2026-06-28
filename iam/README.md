@@ -1,69 +1,60 @@
-# IAM — Identity and Access Management Controls
+# IAM — Identity and Access Management
 
 ## Overview
 
-This folder contains custom IAM policies designed to demonstrate least privilege principles as they apply to cloud security and GRC engineering. Each policy is scoped to a specific persona and includes explicit Deny statements — not just Allow — to make the controls tamper-resistant.
+This folder demonstrates the same IAM controls implemented two ways — the traditional GRC approach and the GRC engineering approach. The controls are identical. The difference is the artifact each approach produces and what that means for repeatability, evidence quality, and scale.
 
-These policies were created as part of a hands-on AWS GRC practice environment. They are intentionally more restrictive than AWS managed policies to reflect real-world audit and compliance requirements.
+| | Traditional GRC | GRC Engineering |
+|---|---|---|
+| **How controls are deployed** | Console clicks, manual | CloudFormation template |
+| **Evidence** | Screenshots, credential report CSV | Deployed stack + Git history |
+| **Repeatability** | Redo manually each time | Same command, any account |
+| **Change tracking** | None (console has no history) | Git commits with author + rationale |
+| **Peer review** | Email or ticket | Pull request |
+| **Scales to 50 accounts** | No | Yes |
 
 ---
 
-## Policies
+## Folder Structure
 
-### `auditor-readonly.json`
+```
+iam/
+├── traditional/
+│   ├── README.md          ← what was done manually and why it has limits
+│   └── evidence/          ← local only (gitignored) — credential reports, screenshots
+├── engineering/
+│   ├── README.md          ← the automated approach and its advantages
+│   └── cloudformation/
+│       └── iam-baseline.yaml   ← deploys the full baseline in one command
+└── policies/
+    ├── auditor-readonly.json        ← scoped read-only with explicit deny on writes
+    ├── developer-s3-limited.json    ← S3-only access scoped to a specific bucket
+    └── admin-with-guardrails.json   ← admin access with tamper-resistant audit controls
+```
+
+The `policies/` folder is shared — the same JSON is used by both approaches. In the traditional path they were created by pasting JSON into the console. In the engineering path the CloudFormation template references the same logic inline.
+
+---
+
+## The Policies
+
+### `auditor-readonly`
 **Persona:** External auditor or internal audit reviewer
 
-**Design rationale:**
-- Grants read access across IAM, S3, CloudTrail, CloudWatch, Config, and EC2 — the services an auditor needs to review access controls and audit logs
-- Explicitly **Denies** all write and administrative actions, including creating users, modifying policies, and disabling CloudTrail or Config
-- The explicit Deny overrides any other Allow — this ensures the policy is safe to attach even if AWS managed policies are also present
+Grants read access across IAM, S3, CloudTrail, CloudWatch, Config, and EC2. Explicitly Denies all write and administrative actions. The explicit Deny overrides any other Allow — this makes the policy safe to attach alongside other policies without risk of privilege escalation.
 
-**Control mapping:**
-| Control | Framework | Reference |
-|---|---|---|
-| Least privilege access | CIS AWS Benchmark | 1.16 |
-| Audit log read access | SOC 2 | CC7.2 |
-| Separation of duties | NIST CSF | PR.AC-4 |
+Maps to: CIS 1.16 | SOC 2 CC6.3 | NIST CSF PR.AC-4 | CMMC AC.L1-3.1.1, AC.L2-3.1.5 | ISO 27001 A.5.15, A.5.3 | ISO 27017 CLD.9.2.3, CLD.6.3.1
 
----
+### `developer-s3-limited`
+**Persona:** Application developer
 
-### `developer-s3-limited.json`
-**Persona:** Application developer who needs S3 access only
+Scoped to a specific S3 bucket ARN — not all buckets. Resource-level least privilege, not just action-level. Explicitly Denies all IAM, CloudTrail, Config, and Organizations actions.
 
-**Design rationale:**
-- Scoped to a **specific S3 bucket ARN** — not all buckets. Resource-level least privilege, not just action-level
-- Allows CloudWatch Logs read so developers can troubleshoot application issues
-- Explicitly **Denies** all IAM, CloudTrail, Config, and Organizations actions — a developer has no business touching security infrastructure
-- The bucket ARN placeholder (`REPLACE-WITH-YOUR-BUCKET`) is intentional — in practice this would be populated with the actual bucket name at deployment time
+Maps to: CIS 1.16 | SOC 2 CC6.3 | NIST CSF PR.AC-4 | CMMC AC.L1-3.1.1, AC.L1-3.1.2 | ISO 27001 A.5.15, A.5.18 | ISO 27017 CLD.9.2.3
 
-**Control mapping:**
-| Control | Framework | Reference |
-|---|---|---|
-| Least privilege access | CIS AWS Benchmark | 1.16 |
-| Restrict access to sensitive services | NIST CSF | PR.AC-3 |
-| Separation of duties | SOC 2 | CC6.3 |
+### `admin-with-guardrails`
+**Persona:** Cloud administrator (day-to-day work — not root)
 
----
+Grants broad admin access but with two critical Deny guardrails: (1) cannot disable CloudTrail, Config, GuardDuty, or Security Hub — detective controls are tamper-resistant; (2) cannot act outside us-east-1 — region lock keeps all activity visible in one audit log.
 
-### `admin-with-guardrails.json`
-**Persona:** Cloud administrator (day-to-day admin work — not root)
-
-**Design rationale:**
-- Grants broad admin access (`Action: *`) but adds two critical Deny guardrails
-- **Guardrail 1 — Audit control protection:** Explicitly Denies stopping CloudTrail, disabling Config, deleting GuardDuty, or disabling Security Hub. This prevents an admin (or a compromised admin credential) from disabling the detective controls that would catch malicious activity
-- **Guardrail 2 — Region lock:** Denies all actions outside `us-east-1`. This is a common GRC control to prevent resource sprawl and ensure all activity is visible in a single region's audit logs
-- In a production environment this policy would be applied via an IAM role, not a user, and would require MFA to assume
-
-**Control mapping:**
-| Control | Framework | Reference |
-|---|---|---|
-| Protect audit logs from modification | CIS AWS Benchmark | 3.2 |
-| Restrict AWS region usage | CIS AWS Benchmark | 4.1 |
-| Tamper-resistant logging | SOC 2 | CC7.2 |
-| Admin access control | NIST CSF | PR.AC-4 |
-
----
-
-## Evidence
-
-The `evidence/` folder stores locally-generated audit artifacts (IAM Credential Reports, Access Advisor exports). These files are excluded from version control via `.gitignore` because they contain account-specific data. In a real audit engagement these would be stored in a secure evidence management system.
+Maps to: CIS 3.2, 4.1 | SOC 2 CC7.2, CC6.6 | NIST CSF PR.IP-1, PR.AC-5 | CMMC AU.L2-3.3.1, CM.L2-3.4.6 | ISO 27001 A.8.15, A.8.19 | ISO 27017 CLD.12.4.5, CLD.12.1.5
