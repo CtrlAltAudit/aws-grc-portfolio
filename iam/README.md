@@ -1,5 +1,7 @@
 # IAM — Identity and Access Management
 
+*Project 1 of 6 — AWS GRC Engineering Portfolio*
+
 ## Overview
 
 This folder demonstrates the same IAM controls implemented two ways — the traditional GRC approach and the GRC engineering approach. The controls are identical. The difference is the artifact each approach produces and what that means for repeatability, evidence quality, and scale.

@@ -19,6 +19,8 @@ aws cloudformation deploy \
 
 Total time: under 2 minutes. No console navigation required.
 
+**For demo purposes only** — passing passwords via `--parameter-overrides` can leak into shell history and CI logs. The parameters are marked `NoEcho: true` so CloudFormation won't display or log the values, but in production these should be sourced from AWS Secrets Manager (or generated and rotated automatically) rather than passed on the command line.
+
 ---
 
 ## Why This Approach Is Better for GRC
