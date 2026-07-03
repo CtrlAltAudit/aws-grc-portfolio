@@ -34,7 +34,7 @@ iam/
     └── admin-with-guardrails.json   ← admin access with tamper-resistant audit controls
 ```
 
-The `policies/` folder is shared — the same JSON is used by both approaches. In the traditional path they were created by pasting JSON into the console. In the engineering path the CloudFormation template references the same logic inline.
+The `policies/` folder holds the source-of-truth policy logic. In the traditional path they were created by pasting this JSON into the console. In the engineering path the same Allow/Deny logic is re-expressed inline in the CloudFormation template (not a direct file reference, since CFN inlines policy documents) — the two are kept in sync by hand.
 
 ---
 
@@ -57,6 +57,8 @@ Maps to: CIS 1.16 | SOC 2 CC6.3 | NIST CSF PR.AC-4 | CMMC AC.L1-3.1.1, AC.L1-3.1
 ### `admin-with-guardrails`
 **Persona:** Cloud administrator (day-to-day work — not root)
 
-Grants broad admin access but with two critical Deny guardrails: (1) cannot disable CloudTrail, Config, GuardDuty, or Security Hub — detective controls are tamper-resistant; (2) cannot act outside us-east-1 — region lock keeps all activity visible in one audit log.
+Grants broad admin access but with two Deny guardrails: (1) cannot disable CloudTrail, Config, GuardDuty, or Security Hub — detective controls resist casual or accidental tampering; (2) cannot act outside us-east-1 — region lock keeps all activity visible in one audit log.
 
-Maps to: CIS 3.2, 4.1 | SOC 2 CC7.2, CC6.6 | NIST CSF PR.IP-1, PR.AC-5 | CMMC AU.L2-3.3.1, CM.L2-3.4.6 | ISO 27001 A.8.15, A.8.19 | ISO 27017 CLD.12.4.5, CLD.12.1.5
+**Known limitation:** this is an identity-based policy, not an SCP. An admin with `iam:*` can detach or delete this policy from their own user, so the guardrails protect against accidental or scripted misuse — not a determined or fully compromised admin credential. True tamper-resistance for a Deny guardrail requires enforcing it at the AWS Organizations level via a Service Control Policy, which sits outside any single account's IAM and can't be self-modified.
+
+Maps to: CIS 3.2, 4.1 | SOC 2 CC7.2, CC6.6 | NIST CSF PR.PT-1, PR.AC-5 | CMMC AU.L2-3.3.1, CM.L2-3.4.6 | ISO 27001 A.8.15, A.8.19 | ISO 27017 CLD.12.4.5, CLD.12.1.5

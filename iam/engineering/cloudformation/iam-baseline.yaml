@@ -188,7 +188,7 @@ Resources:
       UserName: !Sub '${NamePrefix}auditor'
       LoginProfile:
         Password: !Ref AuditorPassword
-        PasswordResetRequired: false
+        PasswordResetRequired: true
       ManagedPolicyArns:
         - !Ref AuditorReadonlyPolicy
 
@@ -198,7 +198,7 @@ Resources:
       UserName: !Sub '${NamePrefix}admin'
       LoginProfile:
         Password: !Ref AdminPassword
-        PasswordResetRequired: false
+        PasswordResetRequired: true
       ManagedPolicyArns:
         - !Ref AdminWithGuardrailsPolicy
 
@@ -208,7 +208,7 @@ Resources:
       UserName: !Sub '${NamePrefix}dev'
       LoginProfile:
         Password: !Ref DevPassword
-        PasswordResetRequired: false
+        PasswordResetRequired: true
       ManagedPolicyArns:
         - !Ref DeveloperS3LimitedPolicy
 

@@ -12,8 +12,8 @@
         "s3:GetBucketLocation"
       ],
       "Resource": [
-        "arn:aws:s3:::dev-application-bucket-REPLACE-WITH-YOUR-BUCKET",
-        "arn:aws:s3:::dev-application-bucket-REPLACE-WITH-YOUR-BUCKET/*"
+        "arn:aws:s3:::dev-application-bucket-REPLACE-ME",
+        "arn:aws:s3:::dev-application-bucket-REPLACE-ME/*"
       ]
     },
     {
@@ -28,7 +28,7 @@
       "Resource": "*"
     },
     {
-      "Sid": "DenyIAMAndSecurityChanges",
+      "Sid": "DenySecurityInfrastructure",
       "Effect": "Deny",
       "Action": [
         "iam:*",

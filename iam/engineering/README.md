@@ -14,10 +14,13 @@ aws cloudformation deploy \
   --parameter-overrides \
       AuditorPassword=<password> \
       AdminPassword=<password> \
-      DevPassword=<password>
+      DevPassword=<password> \
+      DevBucketName=<your-real-bucket-name>
 ```
 
 Total time: under 2 minutes. No console navigation required.
+
+`DevBucketName` defaults to a placeholder (`dev-application-bucket-REPLACE-ME`) — override it with a bucket that actually exists, or the `developer-s3-limited` policy will be scoped to a bucket that doesn't exist and grant no real access.
 
 **For demo purposes only** — passing passwords via `--parameter-overrides` can leak into shell history and CI logs. The parameters are marked `NoEcho: true` so CloudFormation won't display or log the values, but in production these should be sourced from AWS Secrets Manager (or generated and rotated automatically) rather than passed on the command line.
 
@@ -69,5 +72,7 @@ Framework note: CMMC 2.0 Level 2 = all 110 NIST SP 800-171 practices, required f
 | Least privilege — auditor scoped read-only | 1.16 | CC6.3 | PR.AC-4 | AC.L1-3.1.1, AC.L1-3.1.2 | A.5.15, A.5.18 | CLD.9.2.3 |
 | Least privilege — developer scoped to specific S3 bucket ARN | 1.16 | CC6.3 | PR.AC-4 | AC.L1-3.1.1, AC.L1-3.1.2 | A.5.15, A.5.18 | CLD.9.2.3 |
 | Separation of duties — auditor cannot modify IAM | 1.16 | CC6.3 | PR.AC-4 | AC.L2-3.1.5 | A.5.3 | CLD.6.3.1 |
-| Explicit deny on audit control tampering (admin guardrails) | 3.2 | CC7.2 | PR.IP-1 | AU.L2-3.3.1 | A.8.15 | CLD.12.4.5 |
+| Explicit deny on audit control tampering (admin guardrails)* | 3.2 | CC7.2 | PR.PT-1 | AU.L2-3.3.1 | A.8.15 | CLD.12.4.5 |
 | Region lock — admin restricted to us-east-1 | 4.1 | CC6.6 | PR.AC-5 | CM.L2-3.4.6 | A.8.19 | CLD.12.1.5 |
+
+\* Enforced via an identity-based IAM Deny, not an SCP — see [`../README.md`](../README.md#the-policies) for the known limitation (an admin with `iam:*` could remove this guardrail from their own user).
