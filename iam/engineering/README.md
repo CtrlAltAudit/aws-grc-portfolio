@@ -18,7 +18,9 @@ aws cloudformation deploy \
       DevBucketName=<your-real-bucket-name>
 ```
 
-Total time: under 2 minutes. No console navigation required.
+Total time: under 2 minutes. No console navigation required — deploying via the console produces the same result:
+
+![CloudFormation deployment timeline showing all six resources reaching CREATE_COMPLETE in under a minute](screenshots/deployment-timeline.png)
 
 `DevBucketName` defaults to a placeholder (`dev-application-bucket-REPLACE-ME`) — override it with a bucket that actually exists, or the `developer-s3-limited` policy will be scoped to a bucket that doesn't exist and grant no real access.
 
@@ -52,7 +54,23 @@ The template mitigates this with `AdminPermissionsBoundary`, attached to the adm
 
 **This is a real fix, not just documentation** — it was verified by deploying the stack, logging in as the CFN-managed admin user, and attempting to detach the guardrail policy from the console; the action returns an explicit `AccessDenied`, the same control-test pattern used to verify the `auditor-readonly` deny in Project 1.
 
+![IAM console showing the permissions boundary attached to cfn-admin](screenshots/permissions-boundary-attached.png)
+
+![AccessDenied error when cfn-admin attempts to detach its own guardrail policy, blocked by the permissions boundary](screenshots/access-denied-self-escalation.png)
+
 **Residual gap:** an admin with `iam:*` could still delete the boundary *policy itself* (CloudFormation can't self-reference a resource's own ARN within its own policy document, so that specific denial isn't expressible here without a separate follow-up stack). The complete fix for that is an AWS Organizations Service Control Policy, which is enforced outside the account entirely and can't be self-modified — out of scope for a single-account free-tier setup, but the correct answer at multi-account scale.
+
+---
+
+## Drift Detection: Catching Out-of-Band Changes
+
+CloudFormation can compare a deployed stack's actual state against the template that defines it. If any resource was changed outside of CloudFormation — through the console, CLI, or another automation — drift detection flags it.
+
+Tested by manually attaching the AWS-managed `AdministratorAccess` policy to the CFN-managed auditor user (outside of CloudFormation), then running **Stack actions → Detect drift**:
+
+![CloudFormation drift detail showing AdministratorAccess added to AuditorUser outside of the template](screenshots/drift-detected-auditor.png)
+
+The diff is precise: `ManagedPolicyArns.0` shows `ADD` with the unauthorized policy ARN as the actual value and nothing expected in its place. In a traditional GRC program, this kind of change would only surface at the next periodic review — weeks or months later, if at all. Here it's detectable on demand, and could be scheduled to run automatically (e.g., via EventBridge + Lambda) for continuous monitoring.
 
 ---
 
