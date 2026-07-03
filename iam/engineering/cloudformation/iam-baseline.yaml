@@ -180,6 +180,46 @@ Resources:
               StringNotEquals:
                 aws:RequestedRegion: us-east-1
 
+  AdminPermissionsBoundary:
+    Type: AWS::IAM::ManagedPolicy
+    # Mitigates the self-privilege-escalation gap: an admin with iam:* could otherwise
+    # detach/delete AdminWithGuardrailsPolicy or remove this boundary from itself.
+    # Allows all actions by default so day-to-day admin work is unaffected — only the
+    # specific self-tampering actions below are denied.
+    Properties:
+      ManagedPolicyName: !Sub '${NamePrefix}admin-permissions-boundary'
+      Description: Permissions boundary preventing the admin user from removing its own guardrails
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowAllByDefault
+            Effect: Allow
+            Action: '*'
+            Resource: '*'
+          - Sid: DenyDetachingGuardrailPolicy
+            Effect: Deny
+            Action:
+              - iam:DetachUserPolicy
+              - iam:DeleteUserPolicy
+            Resource: !Sub 'arn:aws:iam::${AWS::AccountId}:user/${NamePrefix}admin'
+            Condition:
+              ArnEquals:
+                iam:PolicyARN: !Ref AdminWithGuardrailsPolicy
+          - Sid: DenyModifyingOrDeletingGuardrailPolicy
+            Effect: Deny
+            Action:
+              - iam:DeletePolicy
+              - iam:CreatePolicyVersion
+              - iam:DeletePolicyVersion
+              - iam:SetDefaultPolicyVersion
+            Resource: !Ref AdminWithGuardrailsPolicy
+          - Sid: DenyRemovingOrSwappingOwnBoundary
+            Effect: Deny
+            Action:
+              - iam:DeleteUserPermissionsBoundary
+              - iam:PutUserPermissionsBoundary
+            Resource: !Sub 'arn:aws:iam::${AWS::AccountId}:user/${NamePrefix}admin'
+
   # ── IAM Users ─────────────────────────────────────────────────────────────
 
   AuditorUser:
@@ -196,6 +236,7 @@ Resources:
     Type: AWS::IAM::User
     Properties:
       UserName: !Sub '${NamePrefix}admin'
+      PermissionsBoundary: !Ref AdminPermissionsBoundary
       LoginProfile:
         Password: !Ref AdminPassword
         PasswordResetRequired: true
@@ -233,6 +274,10 @@ Outputs:
   AdminPolicyArn:
     Description: ARN of the admin-with-guardrails managed policy
     Value: !Ref AdminWithGuardrailsPolicy
+
+  AdminPermissionsBoundaryArn:
+    Description: ARN of the permissions boundary attached to the admin user
+    Value: !Ref AdminPermissionsBoundary
 
   DevPolicyArn:
     Description: ARN of the developer-s3-limited managed policy

@@ -40,6 +40,22 @@ Total time: under 2 minutes. No console navigation required.
 
 ---
 
+## Permissions Boundary: Closing the Self-Escalation Gap
+
+The security review of this project found a real gap in `admin-with-guardrails`: it's an identity-based Deny, and an admin with `iam:*` can simply detach or delete that policy from their own user, defeating the guardrails entirely.
+
+The template mitigates this with `AdminPermissionsBoundary`, attached to the admin user via the `PermissionsBoundary` property. A permissions boundary caps the *effective* maximum permissions an identity can have — even if the identity policy allows an action, the boundary must also allow it, or it's denied. This boundary allows everything by default (so normal admin work is unaffected) and specifically denies:
+
+- Detaching or deleting `AdminWithGuardrailsPolicy` from the admin user
+- Deleting, modifying, or repointing the default version of `AdminWithGuardrailsPolicy`
+- Removing or swapping the permissions boundary itself off the admin user
+
+**This is a real fix, not just documentation** — it was verified by deploying the stack, logging in as the CFN-managed admin user, and attempting to detach the guardrail policy from the console; the action returns an explicit `AccessDenied`, the same control-test pattern used to verify the `auditor-readonly` deny in Project 1.
+
+**Residual gap:** an admin with `iam:*` could still delete the boundary *policy itself* (CloudFormation can't self-reference a resource's own ARN within its own policy document, so that specific denial isn't expressible here without a separate follow-up stack). The complete fix for that is an AWS Organizations Service Control Policy, which is enforced outside the account entirely and can't be self-modified — out of scope for a single-account free-tier setup, but the correct answer at multi-account scale.
+
+---
+
 ## Known Limitation: Password Policy
 
 CloudFormation does not have a native resource for the IAM account-level password policy (`AWS::IAM::AccountPasswordPolicy` does not exist). This is a gap in CloudFormation coverage for account-level settings.
@@ -74,5 +90,6 @@ Framework note: CMMC 2.0 Level 2 = all 110 NIST SP 800-171 practices, required f
 | Separation of duties — auditor cannot modify IAM | 1.16 | CC6.3 | PR.AC-4 | AC.L2-3.1.5 | A.5.3 | CLD.6.3.1 |
 | Explicit deny on audit control tampering (admin guardrails)* | 3.2 | CC7.2 | PR.PT-1 | AU.L2-3.3.1 | A.8.15 | CLD.12.4.5 |
 | Region lock — admin restricted to us-east-1 | 4.1 | CC6.6 | PR.AC-5 | CM.L2-3.4.6 | A.8.19 | CLD.12.1.5 |
+| Permissions boundary prevents admin from self-removing guardrails | 1.16, 3.2 | CC6.3, CC7.2 | PR.AC-4, PR.PT-1 | AC.L2-3.1.5 | A.5.3, A.8.15 | CLD.6.3.1, CLD.12.4.5 |
 
 \* Enforced via an identity-based IAM Deny, not an SCP — see [`../README.md`](../README.md#the-policies) for the known limitation (an admin with `iam:*` could remove this guardrail from their own user).
