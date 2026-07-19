@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
-  IAM baseline — deploys least-privilege managed policies and IAM users for
+  IAM baseline - deploys least-privilege managed policies and IAM users for
   three personas: auditor (read-only), admin (with guardrails), developer (S3-scoped).
   Maps to CIS AWS Benchmark 1.x and SOC 2 CC6.x controls.
 

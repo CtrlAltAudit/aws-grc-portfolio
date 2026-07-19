@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
-  CloudTrail audit logging baseline — deploys a hardened S3 bucket, a multi-region
+  CloudTrail audit logging baseline - deploys a hardened S3 bucket, a multi-region
   trail with log file validation and CloudWatch Logs integration, and a metric
   filter + alarm + SNS topic that fires on root account activity.
   Maps to CIS AWS Benchmark 3.x and SOC 2 CC7.x controls.
