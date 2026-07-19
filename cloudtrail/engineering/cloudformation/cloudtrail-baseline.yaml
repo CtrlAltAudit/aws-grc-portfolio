@@ -44,9 +44,12 @@ Resources:
   CloudTrailBucketPolicy:
     Type: AWS::S3::BucketPolicy
     # Restricts writes to the CloudTrail service only — not any IAM principal in this
-    # account. Scoped by service principal + account condition rather than a specific
-    # trail ARN, since the trail depends on this bucket and referencing the trail's
-    # ARN here would create a circular dependency.
+    # account, and not any OTHER trail in this account either. aws:SourceArn is scoped
+    # to this specific trail's ARN, constructed as a deterministic string (region +
+    # account + the trail's own known name) rather than via !GetAtt on the Trail
+    # resource — a !GetAtt reference would create a circular dependency, since the
+    # trail also depends on this bucket policy existing first. Constructing the same
+    # ARN as a plain string sidesteps that while still closing the gap precisely.
     Properties:
       Bucket: !Ref CloudTrailBucket
       PolicyDocument:
@@ -61,6 +64,7 @@ Resources:
             Condition:
               StringEquals:
                 aws:SourceAccount: !Ref AWS::AccountId
+                aws:SourceArn: !Sub 'arn:aws:cloudtrail:${AWS::Region}:${AWS::AccountId}:trail/${NamePrefix}management-events-trail'
           - Sid: AWSCloudTrailWrite
             Effect: Allow
             Principal:
@@ -71,6 +75,7 @@ Resources:
               StringEquals:
                 s3:x-amz-acl: bucket-owner-full-control
                 aws:SourceAccount: !Ref AWS::AccountId
+                aws:SourceArn: !Sub 'arn:aws:cloudtrail:${AWS::Region}:${AWS::AccountId}:trail/${NamePrefix}management-events-trail'
 
   # ── Real-Time Log Stream ─────────────────────────────────────────────────
 

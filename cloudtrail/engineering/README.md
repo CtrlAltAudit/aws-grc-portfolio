@@ -21,7 +21,7 @@ Total time: under 2 minutes. After deploying, check the notification email inbox
 
 ## What Gets Deployed
 
-- **A dedicated, hardened S3 bucket** (`CloudTrailBucket`) — versioned, encrypted, all public access blocked, with a bucket policy scoped so only the CloudTrail service principal can write to it (and only under its own `AWSLogs/<account-id>/` prefix)
+- **A dedicated, hardened S3 bucket** (`CloudTrailBucket`) — versioned, encrypted, all public access blocked, with a bucket policy scoped so only the CloudTrail service principal can write to it, only under its own `AWSLogs/<account-id>/` prefix, and only when the request originates from this specific trail's ARN (not just any trail in the account)
 - **A multi-region trail** (`ManagementEventsTrail`) — captures all management events (Read + Write), with log file validation enabled
 - **A CloudWatch Logs integration** — a narrowly-scoped IAM role lets CloudTrail stream events in near-real-time to a dedicated log group, nothing else
 - **A metric filter, alarm, and SNS topic** — parses the live log stream for root-account activity and emails an alert within minutes
@@ -39,6 +39,14 @@ Total time: under 2 minutes. After deploying, check the notification email inbox
 **Drift-detectable.** If someone disables log file validation or loosens the bucket policy outside of CloudFormation, drift detection catches it — the same mechanism demonstrated in Project 1.
 
 ---
+
+## Security Review Findings and Remediation
+
+A security review of this template (same rigor as Project 1's review) found one moderate and one minor item. One was fixed; the other is a documented, deliberate tradeoff rather than a silent gap:
+
+**Fixed — bucket policy `aws:SourceArn` scoping.** The initial version scoped the bucket policy using only an `aws:SourceAccount` condition, which blocks cross-account writes but leaves a narrow gap: any other CloudTrail trail created in this same account (by anyone with `cloudtrail:CreateTrail` permission) could also write into this bucket. AWS's own reference bucket policies additionally scope with `aws:SourceArn` to the specific trail ARN — but doing that with `!GetAtt ManagementEventsTrail.Arn` would create a circular dependency, since the trail also depends on this bucket policy existing first. The fix: the trail's ARN is constructed as a deterministic string (`region` + `account ID` + the trail's own parameterized name) rather than referenced via the resource itself — same precision, no circular dependency.
+
+**Documented tradeoff — SSE-S3 instead of SSE-KMS.** The bucket uses SSE-S3 (AES-256) encryption, not a customer-managed KMS key. A KMS key would add independent access logging on key usage and the ability to revoke decrypt access without touching the bucket policy — a real hardening improvement for a production audit-log bucket. It's deliberately not used here because KMS keys cost ~$1/month and this project is scoped to stay within AWS free tier. SSE-S3 still satisfies CIS 2.1.5/3.3 and the SOC 2/NIST CSF controls mapped below; the gap is between "compliant" and "maximally hardened," not between "compliant" and "non-compliant."
 
 ## Known Limitation: Email Subscription Confirmation
 
