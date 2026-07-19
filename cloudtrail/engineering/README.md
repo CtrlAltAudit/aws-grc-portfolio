@@ -17,6 +17,12 @@ aws cloudformation deploy \
 
 Total time: under 2 minutes. After deploying, check the notification email inbox for an SNS subscription confirmation — CloudFormation can create the subscription, but AWS requires a human to click the confirmation link before email alerts actually deliver (there's no way to automate that step; it's a deliberate anti-spam control on AWS's side).
 
+Deploying via the console produces the same result — all nine resources reach `CREATE_COMPLETE` in under a minute:
+
+![CloudFormation deployment timeline showing all nine CloudTrail resources reaching CREATE_COMPLETE](screenshots/deployment-timeline.png)
+
+![CloudFormation resources tab listing all nine resources as CREATE_COMPLETE](screenshots/resources-complete.png)
+
 ---
 
 ## What Gets Deployed
@@ -36,7 +42,15 @@ Total time: under 2 minutes. After deploying, check the notification email inbox
 
 **The template IS the evidence.** An auditor doesn't need to trust that log file validation is "probably still on" — the template in Git is the authoritative record of intended configuration, and the deployed stack is queryable via API to confirm actual state matches.
 
-**Drift-detectable.** If someone disables log file validation or loosens the bucket policy outside of CloudFormation, drift detection catches it — the same mechanism demonstrated in Project 1.
+**Drift-detectable.** If someone disables log file validation or loosens the bucket policy outside of CloudFormation, drift detection catches it — the same mechanism demonstrated in Project 1. Tested here directly: log file validation was manually disabled on the deployed trail (outside CloudFormation), and drift detection caught it immediately with a precise property-level diff:
+
+![CloudFormation drift detail showing EnableLogFileValidation changed from true to false outside of the template](screenshots/drift-detected-log-file-validation.png)
+
+Note that even the account's `admin-with-guardrails` persona from Project 1 could not make this change — `cloudtrail:UpdateTrail` is explicitly denied by that policy's audit-control-tampering guardrail, so disabling this had to be done as root. That's the guardrail from Project 1 correctly reaching across to protect a Project 2 resource, unprompted.
+
+After re-enabling log file validation, a follow-up drift check confirms the stack is back in sync:
+
+![CloudFormation drift status showing all resources back to IN_SYNC after the fix](screenshots/drift-resolved-in-sync.png)
 
 ---
 
@@ -47,6 +61,10 @@ A security review of this template (same rigor as Project 1's review) found one 
 **Fixed — bucket policy `aws:SourceArn` scoping.** The initial version scoped the bucket policy using only an `aws:SourceAccount` condition, which blocks cross-account writes but leaves a narrow gap: any other CloudTrail trail created in this same account (by anyone with `cloudtrail:CreateTrail` permission) could also write into this bucket. AWS's own reference bucket policies additionally scope with `aws:SourceArn` to the specific trail ARN — but doing that with `!GetAtt ManagementEventsTrail.Arn` would create a circular dependency, since the trail also depends on this bucket policy existing first. The fix: the trail's ARN is constructed as a deterministic string (`region` + `account ID` + the trail's own parameterized name) rather than referenced via the resource itself — same precision, no circular dependency.
 
 **Documented tradeoff — SSE-S3 instead of SSE-KMS.** The bucket uses SSE-S3 (AES-256) encryption, not a customer-managed KMS key. A KMS key would add independent access logging on key usage and the ability to revoke decrypt access without touching the bucket policy — a real hardening improvement for a production audit-log bucket. It's deliberately not used here because KMS keys cost ~$1/month and this project is scoped to stay within AWS free tier. SSE-S3 still satisfies CIS 2.1.5/3.3 and the SOC 2/NIST CSF controls mapped below; the gap is between "compliant" and "maximally hardened," not between "compliant" and "non-compliant."
+
+A smaller issue also surfaced during review and deployment: the template's `Description` field originally used a Unicode em dash, which the CloudFormation console rendered as a literal `?` character rather than the intended dash. Purely cosmetic — it never affected any deployed resource — but fixed by using a plain ASCII hyphen instead, confirmed clean on redeploy:
+
+![CloudFormation stack info showing the corrected description text with no rendering artifacts](screenshots/stack-info-clean-description.png)
 
 ## Known Limitation: Email Subscription Confirmation
 
