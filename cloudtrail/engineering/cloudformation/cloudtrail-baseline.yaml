@@ -1,0 +1,189 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  CloudTrail audit logging baseline — deploys a hardened S3 bucket, a multi-region
+  trail with log file validation and CloudWatch Logs integration, and a metric
+  filter + alarm + SNS topic that fires on root account activity.
+  Maps to CIS AWS Benchmark 3.x and SOC 2 CC7.x controls.
+
+Parameters:
+  NamePrefix:
+    Type: String
+    Default: cfn-
+    Description: >
+      Prefix applied to all resource names. Use "cfn-" to deploy alongside a
+      manually-created trail for comparison. Use "" (empty) for a clean account.
+
+  NotificationEmail:
+    Type: String
+    Description: >
+      Email address to receive root-account-login alerts. AWS will send a
+      subscription confirmation email after this stack deploys — the address
+      must click that link before alerts will actually be delivered.
+
+Resources:
+
+  # ── Log Storage ──────────────────────────────────────────────────────────
+
+  CloudTrailBucket:
+    Type: AWS::S3::Bucket
+    # CIS 2.1.5, 3.3 — block public access, versioning, encryption at rest
+    Properties:
+      BucketName: !Sub '${NamePrefix}cloudtrail-logs-${AWS::AccountId}'
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  CloudTrailBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    # Restricts writes to the CloudTrail service only — not any IAM principal in this
+    # account. Scoped by service principal + account condition rather than a specific
+    # trail ARN, since the trail depends on this bucket and referencing the trail's
+    # ARN here would create a circular dependency.
+    Properties:
+      Bucket: !Ref CloudTrailBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AWSCloudTrailAclCheck
+            Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action: s3:GetBucketAcl
+            Resource: !GetAtt CloudTrailBucket.Arn
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+          - Sid: AWSCloudTrailWrite
+            Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action: s3:PutObject
+            Resource: !Sub '${CloudTrailBucket.Arn}/AWSLogs/${AWS::AccountId}/*'
+            Condition:
+              StringEquals:
+                s3:x-amz-acl: bucket-owner-full-control
+                aws:SourceAccount: !Ref AWS::AccountId
+
+  # ── Real-Time Log Stream ─────────────────────────────────────────────────
+
+  CloudTrailLogGroup:
+    Type: AWS::Logs::LogGroup
+    # CIS 3.4 — streams management events to CloudWatch Logs for near-real-time alerting
+    Properties:
+      LogGroupName: !Sub '/aws/cloudtrail/${NamePrefix}management-events'
+      RetentionInDays: 90
+
+  CloudTrailToCloudWatchLogsRole:
+    Type: AWS::IAM::Role
+    # Scoped narrowly: CloudTrail may only create log streams and write events to
+    # this specific log group, nothing else.
+    Properties:
+      RoleName: !Sub '${NamePrefix}CloudTrailRoleForCloudWatchLogs'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: CloudTrailCreateLogStream
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !GetAtt CloudTrailLogGroup.Arn
+
+  # ── Trail ─────────────────────────────────────────────────────────────────
+
+  ManagementEventsTrail:
+    Type: AWS::CloudTrail::Trail
+    # CIS 3.1 — multi-region, all management events; CIS 3.2 — log file validation
+    DependsOn: CloudTrailBucketPolicy
+    Properties:
+      TrailName: !Sub '${NamePrefix}management-events-trail'
+      S3BucketName: !Ref CloudTrailBucket
+      IsMultiRegionTrail: true
+      IncludeGlobalServiceEvents: true
+      EnableLogFileValidation: true
+      IsLogging: true
+      CloudWatchLogsLogGroupArn: !GetAtt CloudTrailLogGroup.Arn
+      CloudWatchLogsRoleArn: !GetAtt CloudTrailToCloudWatchLogsRole.Arn
+      EventSelectors:
+        - ReadWriteType: All
+          IncludeManagementEvents: true
+
+  # ── Detective Control: Root Account Login Alarm ─────────────────────────
+
+  RootAccountLoginMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    # CIS 3.3 — log metric filter and alarm for root account usage
+    Properties:
+      LogGroupName: !Ref CloudTrailLogGroup
+      FilterName: !Sub '${NamePrefix}root-account-login'
+      FilterPattern: '{ $.userIdentity.type = "Root" && $.userIdentity.invokedBy NOT EXISTS && $.eventType != "AwsServiceEvent" }'
+      MetricTransformations:
+        - MetricName: !Sub '${NamePrefix}RootAccountLogins'
+          MetricNamespace: CloudTrailMetrics
+          MetricValue: '1'
+
+  RootAccountLoginTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub '${NamePrefix}root-login-alerts'
+
+  RootAccountLoginSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref RootAccountLoginTopic
+      Protocol: email
+      Endpoint: !Ref NotificationEmail
+
+  RootAccountLoginAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${NamePrefix}root-account-login-alarm'
+      AlarmDescription: Alerts when the AWS root account logs in or performs an action. Maps to CIS AWS Benchmark 3.3.
+      Namespace: CloudTrailMetrics
+      MetricName: !Sub '${NamePrefix}RootAccountLogins'
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref RootAccountLoginTopic
+
+Outputs:
+
+  CloudTrailBucketName:
+    Description: Name of the S3 bucket storing CloudTrail logs
+    Value: !Ref CloudTrailBucket
+
+  TrailArn:
+    Description: ARN of the CloudTrail trail
+    Value: !GetAtt ManagementEventsTrail.Arn
+
+  LogGroupName:
+    Description: Name of the CloudWatch Logs log group receiving CloudTrail events
+    Value: !Ref CloudTrailLogGroup
+
+  RootAccountLoginAlarmName:
+    Description: Name of the CloudWatch Alarm for root account activity
+    Value: !Ref RootAccountLoginAlarm
+
+  RootAccountLoginTopicArn:
+    Description: ARN of the SNS topic for root login alerts (confirm the email subscription after deploy)
+    Value: !Ref RootAccountLoginTopic
